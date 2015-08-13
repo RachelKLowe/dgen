@@ -2,7 +2,43 @@ pico-8 cartridge // http://www.pico-8.com
 version 4
 __lua__
 --dgen - d/generation inspired
---puzzle shooter by haze-ai
+--puzzle shooter by kenny lowe
+
+--programming
+--
+
+--lowhanging
+--todo-refactor for single player only
+--todo-refactor for shorter variable names
+--todo-more global vars less magic numbers
+--todo-exit tiles and level advancement
+--todo-map out sprite flag use
+--todo-level # text fade in lvl start
+--todo-basic ui elements
+
+--states
+--todo-menu screen
+--todo-intro sequence
+--todo-game over screen
+--todo-win screen
+
+--major game mechanics
+--todo-bouncing ball enemies
+--todo-hidden employee enemies
+--todo-turrets
+--todo-rescuable employees
+--todo-switches that open doors
+--todo-terminals w story
+--todo-laser beam
+
+--asset generation
+--
+
+--music/sfx
+--
+
+--level design
+--
 
 --built in callbacks
 
@@ -13,9 +49,11 @@ function _init()
  l=0
  --state
  s="play"
+ --debug message
+ debug=""
  
- player={}
- enemy={}
+ spr_layout=get_spr_layout()
+ 
  load_lvl()
 end
 
@@ -43,12 +81,71 @@ function draw_play()
  print("time: "..t,10,10,7)
  print("players: "..#player,10,20,7)
  print("enemies: "..#enemy,10,30,7)
+ if (debug!="") then
+  print("debug: "..debug,10,40,7)
+ end
  map(l*16,flr(l/16),0,0,16,16)
  foreach(player,draw_player)
  foreach(enemy,draw_enemy)
 end
 
 --utility functions
+
+function is_solid(s)
+ return fget(s, 0)
+end
+
+
+function get_spr_layout()
+ s_l={}
+ s_l.n=get_spr_orientation("n")
+ s_l.ne=get_spr_orientation("ne")
+ s_l.e=get_spr_orientation("e")
+ s_l.se=get_spr_orientation("se")
+ s_l.s=get_spr_orientation("s")
+ s_l.sw=get_spr_orientation("sw")
+ s_l.w=get_spr_orientation("w")
+ s_l.nw=get_spr_orientation("nw")
+ return s_l
+end
+
+function get_spr_orientation(dir)
+ o={}
+ if (dir=="n") then
+  o.row=0
+  o.fy=false
+  o.fx=false
+ elseif (dir=="ne") then
+  o.row=2
+  o.fy=false
+  o.fx=false
+ elseif (dir=="e") then
+  o.row=1
+  o.fy=false
+  o.fx=false
+ elseif (dir=="se") then
+  o.row=2
+  o.fy=true
+  o.fx=false
+ elseif (dir=="s") then
+  o.row=0
+  o.fy=true
+  o.fx=false
+ elseif (dir=="sw") then
+  o.row=2
+  o.fy=true
+  o.fx=true
+ elseif (dir=="w") then
+  o.row=1
+  o.fy=false
+  o.fx=true
+ elseif (dir=="nw") then
+  o.row=2
+  o.fy=false
+  o.fx=true
+ end
+ return o
+end
 
 function clear_cel(x,y)
  mset(l*16+x,flr(l/16)+y,0)
@@ -62,9 +159,9 @@ end
 --correct level
 
 function load_lvl()
- e={}
- p={}
- t+=1
+ enemy={}
+ player={}
+ t=0
  for y=0,15 do for x=0,15 do
   val=mget(l*16+x,flr(l/16)+y)
   if (val==34) then
@@ -79,38 +176,129 @@ end
 
 function spawn_player(x,y)
  t+=1
- local p = {}
+ local p={}
  p.x=x*8
  p.y=y*8
- p.w=4
- p.h=7
- p.sprite=34
+ p.cx=x+4
+ p.cy=y+4
+ p.r=4
+ p.facing="n"
+ p.sprite_start=18
+ p.sprite=18
+ p.moving=false
+ p.anim_frame=0
+ p.max_frame=3
  clear_cel(x,y)
  add(player,p)
 end
 
 function update_player(p)
  t+=1
- if (btn(1)) then
-  p.x+=1
- elseif (btn(0)) then
-  p.x-=1
+ p.prev_facing=p.facing
+ p.facing=""
+ p.moving=false
+ p.ny=p.y
+ p.nx=p.x
+ if (btn(2)) then
+  if (btn(0) or btn(1)) then
+   p.ny-=.67
+  else
+   p.ny-=1
+  end
+  p.facing="n"
+  p.moving=true
+ elseif (btn(3)) then
+  if (btn(0) or btn(1)) then
+   p.ny+=.67
+  else
+   p.ny+=1
+  end
+  p.facing="s"
+  p.moving=true
  end
+ if (btn(1)) then
+  if (btn(2) or btn(3)) then
+   p.nx+=.67
+  else
+   p.nx+=1
+  end
+  p.facing=p.facing.."e"
+  p.moving=true
+ elseif (btn(0)) then
+  if (btn(2) or btn(3)) then
+   p.nx-=.67
+  else
+   p.nx-=1
+  end
+  p.facing=p.facing.."w"
+  p.moving=true
+ end
+ --next center x/y
+ p.ncx=p.nx+4
+ p.ncy=p.ny+4
+ --lookahead
+ p.colx=p.ncx
+ p.coly=p.ncy
+ if (p.facing=="n") then
+  p.coly=p.coly-p.r
+ elseif (p.facing=="ne") then
+  p.coly=p.coly-(p.r*.67)
+  p.colx=p.colx+(p.r*.67)
+ elseif (p.facing=="e") then
+  p.colx=p.colx+p.r
+ elseif (p.facing=="se") then
+  p.coly=p.coly+(p.r*.67)
+  p.colx=p.colx+(p.r*.67)
+ elseif (p.facing=="s") then
+  p.coly=p.coly+p.r
+ elseif (p.facing=="sw") then
+  p.coly=p.coly+(p.r*.67)
+  p.colx=p.colx-(p.r*.67)
+ elseif (p.facing=="w") then
+  p.colx=p.colx-p.r
+ elseif (p.facing=="nw") then
+  p.coly=p.coly-(p.r*.67)
+  p.colx=p.colx-(p.r*.67)
+ end
+ --collisioncheck
+ next_tile=mget((l*16+(p.colx/8)),
+                (l*16+(p.coly/8)))
+ if is_solid(next_tile) then
+  p.moving=false
+ else
+  p.x=p.nx
+  p.y=p.ny
+ end
+ if (p.moving==true) then
+  if (p.anim_frame<p.max_frame) then
+   p.anim_frame+=1
+  else
+   p.anim_frame=0
+  end
+ else
+  p.anim_frame=0
+  p.facing=p.prev_facing
+ end
+ p.sprite=p.sprite_start
+ p.sprite=p.sprite+(spr_layout[p.facing].row*16)
+ p.sprite=p.sprite+p.anim_frame
 end
 
 function draw_player(p)
- spr(p.sprite, p.x, p.y)
+ spr(p.sprite, p.x, p.y, 1, 1,
+     spr_layout[p.facing].fx,
+     spr_layout[p.facing].fy)
 end
 
 --enemy functions
 
 function spawn_enemy(x,y,sprite)
- local e = {}
- e.x = x*8
- e.y = y*8
- e.w = 4
- e.h = 7
- e.sprite = sprite
+ local e={}
+ e.x=x*8
+ e.y=y*8
+ e.w=4
+ e.h=7
+ e.sprite=sprite
  clear_cel(x,y)
  add(enemy,e)
 end
@@ -123,12 +311,12 @@ function draw_enemy(e)
 end
 __gfx__
 0000000055555555bbbbbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000055ffff55bbbbbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000005ff55595b8bbbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000005f55f595bbbbbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000005f5f5595b88bbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000005f555995bbbbb8bb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000055999955bbb88bbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000055dddd55bbbbbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000005d5555d5b8bbbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000005d5dd5d5bbbbbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000005d5dd5d5b88bbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000005d5555d5bbbbb8bb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000055dddd55bbb88bbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000055555555bbbbbbbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000090000000000000000000000900000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000055550099555500005555000055559900000000000000000000000000000000000000000000000000000000000000000000000000000000
