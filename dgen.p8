@@ -8,11 +8,11 @@ __lua__
 --
 
 --lowhanging
---todo-refactor for single player only
 --todo-refactor for shorter variable names
 --todo-more global vars less magic numbers
 --todo-exit tiles and level advancement
 --todo-map out sprite flag use
+--todo-no magic numbers-define sprites/tags
 --todo-level # text fade in lvl start
 --todo-basic ui elements
 
@@ -72,20 +72,19 @@ end
 --play state callbacks
 
 function update_play()
- foreach(player,update_player)
+ update_player(player)
  foreach(enemy,update_enemy)
 end
 
 function draw_play()
  cls()
  print("time: "..t,10,10,7)
- print("players: "..#player,10,20,7)
- print("enemies: "..#enemy,10,30,7)
+ print("enemies: "..#enemy,10,20,7)
  if (debug!="") then
   print("debug: "..debug,10,40,7)
  end
  map(l*16,flr(l/16),0,0,16,16)
- foreach(player,draw_player)
+ draw_player(player)
  foreach(enemy,draw_enemy)
 end
 
@@ -189,7 +188,7 @@ function spawn_player(x,y)
  p.anim_frame=0
  p.max_frame=3
  clear_cel(x,y)
- add(player,p)
+ player=p
 end
 
 function update_player(p)
